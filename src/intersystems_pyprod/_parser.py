@@ -12,6 +12,7 @@ from operator import attrgetter
 
 from ._method_stubs import STUBS
 
+
 TARGET_SUPERCLASSES = [
     "InboundAdapter",
     "BusinessService",
@@ -215,7 +216,7 @@ def generate_custom_classes(tree, script_name, folder_name, iris_package_name, o
 
     all_classes = {}
     for cls_name, supercls, node, hostname in classes:
-        props_lines, settings_list, message_map_methods = extract_props_and_settings(node, real_path)
+        props_lines, settings_list, message_map_methods = extract_props_and_settings(node, real_path, loaded_module)
         props_block = "\n".join(props_lines) if props_lines else ""
         params_settings = f'Parameter SETTINGS = "{",".join(settings_list)}";' if settings_list else ""
         param_lines = extract_params(node)
@@ -424,7 +425,7 @@ def message_map_xdata(MessageMap):
 
 
 
-def extract_props_and_settings(node: ast.ClassDef, real_path):
+def extract_props_and_settings(node: ast.ClassDef, real_path, loaded_module):
 
     props, settings, message_map_method = [], [], []
 
@@ -440,10 +441,8 @@ def extract_props_and_settings(node: ast.ClassDef, real_path):
         else:
             continue
 
-        if target_node.id.lower() == "messagemap":
-            message_map_as_dictionary = {
-                k.value: v.value for k, v in zip(call_node.keys, call_node.values)
-            }
+        if snake_to_pascal(msg_map:= target_node.id) == "MessageMap":
+            message_map_as_dictionary = getattr(getattr(loaded_module,node.name),msg_map)
             message_map_as_xdata_string = message_map_xdata(message_map_as_dictionary)
             props.append(message_map_as_xdata_string)
             for msg_type, method in message_map_as_dictionary.items():
@@ -531,7 +530,7 @@ def find_ossubclasses(tree):
     return result
 
 
-def generate_os_classes(tree, script_name, folder_name, iris_package_name, output, script_path, manual, real_path, python_library):
+def generate_os_classes(tree, script_name, folder_name, iris_package_name, output, script_path, manual, real_path, python_library, loaded_module):
     classes = find_ossubclasses(tree)
     class_tmpl = STUBS.get("ClassDefinition")
     common_oninit = STUBS.get("Common", {}).get("OnInit", "")
@@ -539,7 +538,7 @@ def generate_os_classes(tree, script_name, folder_name, iris_package_name, outpu
 
     all_classes = {}
     for cls_name, supercls, node in classes:
-        props_lines, settings_list, message_map_methods = extract_props_and_settings(node, real_path)
+        props_lines, settings_list, message_map_methods = extract_props_and_settings(node, real_path, loaded_module)
         props_block = "\n".join(props_lines) if props_lines else ""
         params_settings = f'Parameter SETTINGS = "{",".join(settings_list)}";' if settings_list else ""
         param_lines = extract_params(node)
@@ -990,6 +989,7 @@ def main(argv: list[str] = None):
         args.manual,
         real_path,
         python_library,
+        loaded_module
     )
 
     # Custom subclasses of your runtime types

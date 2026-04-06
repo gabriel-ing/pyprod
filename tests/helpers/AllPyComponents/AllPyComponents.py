@@ -51,7 +51,7 @@ class CustomBP(BusinessProcess):
 class CustomBO(BusinessOperation):
     ADAPTER = IRISParameter("AllPyComponents.CustomOutAdapter")
     MessageMap = {
-        "AllPyComponents.MyJsonData": "BOmethod1",
+        f"{iris_package_name}.MyJsonData": "BOmethod1",
         "AllPyComponents.MyPickleData": "BOmethod2"
     }
 
