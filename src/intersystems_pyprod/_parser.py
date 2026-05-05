@@ -9,7 +9,7 @@ from types import ModuleType
 import importlib
 import importlib.util
 from operator import attrgetter
-from ._prod_controls import start_prod, stop_prod, restart_prod
+from ._prod_controls import get_prod_status, start_prod, stop_prod, restart_prod
 from ._method_stubs import STUBS
 
 
@@ -855,18 +855,27 @@ def generate_msg_wrappers(tree, script_name, folder_name, iris_package_name, pyt
 # _______________________________________________________________________________________________________________________ generate_msg_wrappers #
 
 def production_control(args):
+    """
+    Handle production control commands based on the provided arguments.
+    """
     if args.restart:
+        print("Restarting production...")
         output = restart_prod(args.timeout, args.force)
         print(output["message"])
     elif args.stop:
+        print("Stopping production...")
         output = stop_prod(args.timeout, args.force)
         print(output["message"])
     elif args.start:
-        if isinstance(args.start, bool):
-            print("Please provide a production name to start, e.g. --start PackageName.ProductionName")
-            return
+        print(f"Starting production {args.start}...")
         output = start_prod(args.start)
-        print(output["message"])    
+        print(output["message"])
+    elif args.status:
+        output = get_prod_status()
+        if output["status"]==2: 
+            print(f"No productions are currently running in {os.environ.get('IRISNAMESPACE', 'the current namespace')}.")
+        else:
+            print(f"Production {output['name']} is {output['status_message']}")
 
 def get_package_root(module_name: str) -> Path:
     spec = importlib.util.find_spec(module_name)
@@ -892,16 +901,18 @@ def main(argv: list[str] = None):
     
 
     # Production control options: 
-    parser.add_argument("-r", "--restart", action="store_true", help="Restart the production if it's already running")
-    parser.add_argument("--start", nargs="?", const=True, help="Starts a named production if it's not running. Usage: --start PackageName.ProductionName")
-    parser.add_argument("--stop", action="store_true", help="Stop the production if it's running")
-    parser.add_argument("--timeout", type=int, default=10, help="Timeout in seconds for stopping/restarting the production")
-    parser.add_argument("--force", type=bool, default=False, help="Force stop the production without waiting for graceful shutdown (use with --stop or --restart)")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-r", "--restart", action="store_true", help="Restart the production if it's already running")
+    group.add_argument("--start", metavar="PRODUCTION", help="Start the named production")
+    group.add_argument("--stop", action="store_true", help="Stop the production if it's running")
+    group.add_argument("--status", action="store_true", help="Get the status of the production")
+    parser.add_argument("--timeout", type=int, default=10, help="Timeout in seconds for stopping/restarting the production (use with --stop or --restart)")
+    parser.add_argument("--force", action="store_true", help="Force stop the production without waiting for graceful shutdown (use with --stop or --restart)")
     
 
     args = parser.parse_args(argv)
 
-    prod_control = any([args.restart, args.stop, args.start])
+    prod_control_args = any([args.restart, args.stop, args.start, args.status])
 
     # Load source and module under a correct package context
     if args.sourceroot:
@@ -934,7 +945,7 @@ def main(argv: list[str] = None):
         # File mode
         if not args.input_script:
             # Allow running production controls without providing a script
-            if prod_control:
+            if prod_control_args:
                 production_control(args)
                 sys.exit(0)
             print("You must provide either -m/--module or a path to a .py file.")
@@ -1034,8 +1045,8 @@ def main(argv: list[str] = None):
         loaded_module,
         args.module
     )
-
-    production_control(args)
+    if prod_control_args:
+        production_control(args)
 
 
 if __name__ == "__main__":
