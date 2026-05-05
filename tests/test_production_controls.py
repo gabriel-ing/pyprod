@@ -15,6 +15,7 @@ from intersystems_pyprod._prod_controls import (  # noqa: E402
     RUNNING,
     STATUS_MESSAGES,
     STOPPED,
+    TROUBLED,
     get_prod_status,
     restart_prod,
     start_prod,
@@ -76,6 +77,9 @@ def _stop_active_production(timeout=SETUP_TIMEOUT):
     if current_status["status"] == STOPPED:
         return current_status
 
+    if current_status["status"] == TROUBLED and current_status["name"] == PRODUCTION_NAME:
+        return _recover_troubled_production(timeout)
+
     response = iris.Ens.Director.StopProduction(timeout, False)
     assert response == 1, f"StopProduction failed during test setup with status {response}"
 
@@ -88,7 +92,34 @@ def _stop_active_production(timeout=SETUP_TIMEOUT):
 
     response = iris.Ens.Director.StopProduction(timeout, True)
     assert response == 1, f"Force StopProduction failed during test setup with status {response}"
+
+    try:
+        return _wait_for_status(STOPPED, timeout=timeout)
+    except AssertionError:
+        current_status = _read_director_status()
+        if current_status["status"] == TROUBLED and current_status["name"] == PRODUCTION_NAME:
+            return _recover_troubled_production(timeout)
+        raise
+
+
+def _recover_troubled_production(timeout=SETUP_TIMEOUT):
+    response = iris.Ens.Director.StartProduction(PRODUCTION_NAME)
+    assert response == 1, f"StartProduction recovery failed during test setup with status {response}"
+    _wait_for_status(RUNNING, timeout=timeout, production_name=PRODUCTION_NAME)
+
+    response = iris.Ens.Director.StopProduction(timeout, True)
+    assert response == 1, f"Force StopProduction recovery failed during test setup with status {response}"
     return _wait_for_status(STOPPED, timeout=timeout)
+
+
+def _start_active_production(timeout=SETUP_TIMEOUT):
+    current_status = _read_director_status()
+    if current_status["status"] == RUNNING and current_status["name"] == PRODUCTION_NAME:
+        return current_status
+
+    response = iris.Ens.Director.StartProduction(PRODUCTION_NAME)
+    assert response == 1, f"StartProduction failed during test setup with status {response}"
+    return _wait_for_status(RUNNING, timeout=timeout, production_name=PRODUCTION_NAME)
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -139,9 +170,7 @@ def test_start_production_starts_the_named_production():
 
 
 def test_start_production_rejects_an_already_running_production():
-    result = start_prod(PRODUCTION_NAME)
-    assert result["ok"] is True
-    _wait_for_status(RUNNING, production_name=PRODUCTION_NAME)
+    _start_active_production()
 
     duplicate_result = start_prod(PRODUCTION_NAME)
 
@@ -155,9 +184,7 @@ def test_start_production_rejects_an_already_running_production():
 
 
 def test_restart_production_restarts_the_running_production():
-    result = start_prod(PRODUCTION_NAME)
-    assert result["ok"] is True
-    _wait_for_status(RUNNING, production_name=PRODUCTION_NAME)
+    _start_active_production()
 
     restart_result = restart_prod(timeout=10, force=False)
 
@@ -171,11 +198,23 @@ def test_restart_production_restarts_the_running_production():
 
 
 def test_stop_production_stops_the_running_production():
-    result = start_prod(PRODUCTION_NAME)
-    assert result["ok"] is True
-    _wait_for_status(RUNNING, production_name=PRODUCTION_NAME)
+    _start_active_production()
 
     stop_result = stop_prod(timeout=10, force=False)
+
+    assert stop_result == {
+        "ok": True,
+        "message": f"Production {PRODUCTION_NAME} stopped successfully.",
+    }
+
+    status = _wait_for_status(STOPPED)
+    assert status["status_message"] == "Stopped"
+
+
+def test_forced_stop_production_stops_the_running_production():
+    _start_active_production()
+
+    stop_result = stop_prod(timeout=10, force=True)
 
     assert stop_result == {
         "ok": True,
