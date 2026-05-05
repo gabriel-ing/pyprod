@@ -9,7 +9,7 @@ from types import ModuleType
 import importlib
 import importlib.util
 from operator import attrgetter
-
+from ._prod_controls import start_prod, stop_prod, restart_prod
 from ._method_stubs import STUBS
 
 
@@ -854,7 +854,19 @@ def generate_msg_wrappers(tree, script_name, folder_name, iris_package_name, pyt
 
 # _______________________________________________________________________________________________________________________ generate_msg_wrappers #
 
-
+def production_control(args):
+    if args.restart:
+        output = restart_prod(args.timeout, args.force)
+        print(output["message"])
+    elif args.stop:
+        output = stop_prod(args.timeout, args.force)
+        print(output["message"])
+    elif args.start:
+        if isinstance(args.start, bool):
+            print("Please provide a production name to start, e.g. --start PackageName.ProductionName")
+            return
+        output = start_prod(args.start)
+        print(output["message"])    
 
 def get_package_root(module_name: str) -> Path:
     spec = importlib.util.find_spec(module_name)
@@ -877,7 +889,19 @@ def main(argv: list[str] = None):
     parser.add_argument("-m", "--module", help="Dotted module to analyze (e.g. pkg.sub.mod). If set, ignore positional file.")
     parser.add_argument("-s", "--source-root", help="Project source root used to compute absolute module names when loading from a file", dest="sourceroot")
     parser.add_argument("input_script", nargs="?", help="Path to a .py file (used when -m/--module is not provided)")
+    
+
+    # Production control options: 
+    parser.add_argument("-r", "--restart", action="store_true", help="Restart the production if it's already running")
+    parser.add_argument("--start", nargs="?", const=True, help="Starts a named production if it's not running. Usage: --start PackageName.ProductionName")
+    parser.add_argument("--stop", action="store_true", help="Stop the production if it's running")
+    parser.add_argument("--timeout", type=int, default=10, help="Timeout in seconds for stopping/restarting the production")
+    parser.add_argument("--force", type=bool, default=False, help="Force stop the production without waiting for graceful shutdown (use with --stop or --restart)")
+    
+
     args = parser.parse_args(argv)
+
+    prod_control = any([args.restart, args.stop, args.start])
 
     # Load source and module under a correct package context
     if args.sourceroot:
@@ -909,6 +933,10 @@ def main(argv: list[str] = None):
     else:
         # File mode
         if not args.input_script:
+            # Allow running production controls without providing a script
+            if prod_control:
+                production_control(args)
+                sys.exit(0)
             print("You must provide either -m/--module or a path to a .py file.")
             sys.exit(2)
         try:
@@ -1007,6 +1035,7 @@ def main(argv: list[str] = None):
         args.module
     )
 
+    production_control(args)
 
 
 if __name__ == "__main__":
