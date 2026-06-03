@@ -34,7 +34,7 @@ MESSAGE_SUPERCLASSES = [ "JsonSerialize", "PickleSerialize"]
 # ——— local datatype map ———
 
 
-DATATYPE_MAP = {"str": "%VarString", "int": "%Integer", "bool": "%Boolean"}
+DATATYPE_MAP = {"str": "%VarString", "int": "%Integer", "bool": "%Boolean", "num":"%Numeric"}
 
 DATATYPE_MAP_Parameters = {"str": "STRING", "int": "INTEGER", "bool": "BOOLEAN"}
 
