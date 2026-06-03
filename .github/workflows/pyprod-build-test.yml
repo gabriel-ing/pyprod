@@ -60,8 +60,8 @@ jobs:
 
           #test
           pip install -U pip pytest
-          pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.1.2-py3-none-any.whl"
-          pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.1.2-py3-none-any.whl" --target "/usr/irissys/mgr/python"
+          pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.2.0-py3-none-any.whl"
+          pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.2.0-py3-none-any.whl" --target "/usr/irissys/mgr/python"
           intersystems_pyprod "$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.py"
           runuser -u irisowner -- iris session IRIS -U ENSEMBLE "##class(%SYSTEM.OBJ).Load(\"$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.OSAdapterless.cls\",\"ck\")"
           runuser -u irisowner -- iris session IRIS -U ENSEMBLE "##class(%SYSTEM.OBJ).Load(\"$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.OSCustomBP.cls\",\"ck\")"
