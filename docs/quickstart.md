@@ -236,6 +236,52 @@ class CustomOutAdapter(OutboundAdapter):
 
 ```
 
+## Step 9: Creating the Production
+
+A `Production` class ties all the components together into a single deployable unit. Instead of manually configuring each component through the Production Configuration page, you can declare the entire production structure — including its services, processes, operations, and their settings — directly in Python.
+
+To do this, subclass `Production` and import `ServiceItem`, `ProcessItem`, and `OperationItem` alongside it. Each item represents one config entry in the production: the first argument is the name the component will appear under in the UI, and the second is its full IRIS class name. The `host_settings` dictionary pre-populates settings that would otherwise need to be entered manually in the UI — for example, wiring the `target_config_name` of the service to point at the process, and the process to point at the operation.
+
+```python
+from intersystems_pyprod import Production, ServiceItem, ProcessItem, OperationItem
+
+class QuickStartProduction(Production):
+    description = "QuickStart production wiring service → process → operation"
+    actor_pool_size = 2
+
+    services = [
+        ServiceItem(
+            "QuickStart.CustomBS",
+            "QuickStart.CustomBS",
+            host_settings={"TargetConfigName": "QuickStart.CustomBP"}
+        )
+    ]
+    processes = [
+        ProcessItem(
+            "QuickStart.CustomBP",
+            "QuickStart.CustomBP",
+            host_settings={"TargetConfigName": "QuickStart.CustomBO"}
+        )
+    ]
+    operations = [
+        OperationItem(
+            "QuickStart.CustomBO",
+            "QuickStart.CustomBO"
+        )
+    ]
+```
+
+When this file is loaded into an IRIS namespace, IRIS generates the production definition automatically from `QuickStartProduction`. You can then start the production directly from the Production Configuration page, or programmatically using the [Director module](https://github.com/intersystems/pyprod/blob/main/docs/apireference.md#-director-module-):
+
+```python
+from intersystems_pyprod.director import start_production
+
+status = start_production("QuickStart.QuickStartProduction")
+```
+
+Read more about the `Production` class and item types [here](https://github.com/intersystems/pyprod/blob/main/docs/apireference.md#-production-class-).
+
+
 ## Helper method to log errors
 
 ```python

@@ -1,97 +1,96 @@
 import iris
 import pytest
 import time
-import os
-from pathlib import Path
+import warnings
 
-def _detect_repo_root() -> Path:
-    # Prefer GH Actions env when present
-    ws = os.environ.get("GITHUB_WORKSPACE")
-    if ws:
-        return Path(ws).resolve()
-    # Otherwise walk up from this file until we find a repo marker
-    here = Path(__file__).resolve()
-    for p in [here] + list(here.parents):
-        if (p / "pyproject.toml").exists() or (p / ".git").exists():
-            return p
-    return Path.cwd()
+from intersystems_pyprod import director
+
 
 @pytest.fixture(scope="module",autouse=True)
 def startprod():
-    repo_root = _detect_repo_root()
-    cls_host = repo_root / "tests" / "helpers" / "AllPyComponents" / "Production.cls"
-    if not cls_host.exists():
-        raise FileNotFoundError(f"IRIS class file not found: {cls_host}")
-
-    #nothing
-    status = iris._SYSTEM.OBJ.Load(str(cls_host), "ck")
-    print("production loading status = ", status)
-    status = iris.Ens.Director.StartProduction("AllPyComponents.Production")
+    status = director.start_production("AllPyComponents.MyProduction")
     print("production starting status = ", status)
     end_loop = 1
     start_time = time.time()
-    prod = iris.ref()
-    running = iris.ref()
+
     while end_loop:
         if time.time()-start_time > 12:
             end_loop = 0
             print("unable to start production in 12 seconds")
             isrunning = 0
             break
-        status = iris.Ens.Director.GetProductionStatus(prod, running)
-        if running.value == 1:
+   
+        status, prod, running = director.get_production_status()
+
+        if running == 1:
             isrunning = 1
             end_loop = 0
         else:
             time.sleep(0.5)
     print("productionrunning status = ", isrunning)
 
-
     yield
 
-    status = iris.Ens.Director.StopProduction()
+    status = director.stop_production()
 
     end_loop = 1
     start_time = time.time()
-    prod = iris.ref()
-    running = iris.ref()
     while end_loop:
         if time.time()-start_time > 12:
             end_loop = 0
             print("unable to stop production in 12 seconds")
-        status = iris.Ens.Director.GetProductionStatus(prod, running)
-        if running.value != 1:
+
+        status, prod, running = director.get_production_status()
+
+        if running != 1:
             end_loop = 0
         else:
             time.sleep(0.5)
     
 
 
-def test_BOMethod1():
+def test_bo_method_1():
     """
     This method tests an adapterless business service. 
     """
-    mybs = iris.ref()
-    status = iris.Ens.Director.CreateBusinessService("AllPyComponents.AdapterlessBS", mybs)
-    adapterless = mybs.value
+    status, adapterless = director.create_business_service("AllPyComponents.AdapterlessBS")
     adapterless.TargetConfigName = "AllPyComponents.CustomBP"
-    response = iris.ref()
-    status = adapterless.ProcessInput("testMyJson",response)
-    response = response.value.name
-    adapterless.PythonClassObject = ""
-    assert response == "response from BOmethod1", f"response was {response}"
+    status, response = adapterless.process_input("testMyJson")
+    response = response.name
 
-def test_BOMethod2():
+    assert response == "response from bo_method_1", f"response was {response}"
+
+def test_bo_method_2():
     """
     This method tests an adapterless business service. 
     """
-    mybs = iris.ref()
-    status = iris.Ens.Director.CreateBusinessService("AllPyComponents.AdapterlessBS", mybs)
-    adapterless = mybs.value
+    status, adapterless = director.create_business_service("AllPyComponents.AdapterlessBS")
     adapterless.TargetConfigName = "AllPyComponents.CustomBP"
-    response = iris.ref()
-    status = adapterless.ProcessInput("testMyPickle",response)
-    response = response.value.name
-    adapterless.PythonClassObject = ""
-    assert response == "response from BOmethod2", f"response was {response}"
+    status, response = adapterless.process_input("testMyPickle")
+    response = response.name
 
+    assert response == "response from bo_method_2", f"response was {response}"
+
+def test_OSAdapterless():
+    """
+    This method tests the adapterless service made with a pure 
+    Objectscript service
+    """
+
+    status, adapterless = director.create_business_service("AllPyComponents.OSAdapterless")
+    mymessage = iris.AllPyComponents.MyPickleData._New()
+    mymessage.name = "testMyPickle"
+    status, response = adapterless.process_input(mymessage)
+    response = response.name
+    assert response == "testMyPickle", f"response was {response}"
+
+
+def test_AdapterlessService_getattr():
+    status, os_adapterless = director.create_business_service("AllPyComponents.OSAdapterless")
+    with pytest.raises(AttributeError):
+        _ = os_adapterless.nonexistent_property  
+    with pytest.raises(AttributeError):    
+          os_adapterless.nonexistent_property = "value"                                    
+    with pytest.raises(AttributeError):    
+          _ = os_adapterless.ProcessInput
+              

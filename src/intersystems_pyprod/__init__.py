@@ -5,14 +5,16 @@ import importlib
 
 __all__ = ["IRISParameter", "IRISProperty", "InboundAdapter", "BusinessService",
           "BusinessProcess","BusinessOperation","OutboundAdapter","ProductionMessage",
-          "Column","JsonSerialize","PickleSerialize","IRISLog","Status","debug_host","_add_to_sys_path"]
+          "Column","JsonSerialize","PickleSerialize","IRISLog","Status","debug_host","_add_to_sys_path",
+          "Production", "ServiceItem", "ProcessItem", "OperationItem"]
 
 if TYPE_CHECKING:
     # --- static hints, allows cli tool to run without breaking because of imports ---
     from ._production_connector import ( IRISParameter,IRISProperty,
     InboundAdapter,BusinessService,BusinessProcess,BusinessOperation,
     OutboundAdapter,ProductionMessage,Column,JsonSerialize,
-    PickleSerialize,IRISLog,Status,debug_host,)
+    PickleSerialize,IRISLog,Status,debug_host,
+    Production, ServiceItem, ProcessItem, OperationItem)
 
 def __getattr__(name: str):
     if name in __all__:

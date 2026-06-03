@@ -6,6 +6,8 @@ import sys
 
 import iris
 
+from ._production_definition import Production, ServiceItem, ProcessItem, OperationItem
+
 _seen_path = set(sys.path)
 
 def _add_to_sys_path(path: str) -> None:

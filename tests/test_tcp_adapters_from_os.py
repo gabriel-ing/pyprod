@@ -5,7 +5,9 @@ import queue
 import time
 import iris
 import pytest
-from pathlib import Path
+
+from intersystems_pyprod import director
+
 
 IN_HOST = os.getenv("SERVICE_IN_HOST", "127.0.0.1")
 IN_PORT = int(os.getenv("SERVICE_IN_PORT", "12345"))
@@ -75,43 +77,23 @@ def start_listener(host: str, port: int, recv_q: queue.Queue) -> threading.Threa
     return t
 
 
-def _detect_repo_root() -> Path:
-    # Prefer GH Actions env when present
-    ws = os.environ.get("GITHUB_WORKSPACE")
-    if ws:
-        return Path(ws).resolve()
-    # Otherwise walk up from this file until we find a repo marker
-    here = Path(__file__).resolve()
-    for p in [here] + list(here.parents):
-        if (p / "pyproject.toml").exists() or (p / ".git").exists():
-            return p
-    return Path.cwd()
-
 
 @pytest.fixture(scope="module",autouse=True)
 def startprod():
-    repo_root = _detect_repo_root()
-    cls_host = repo_root / "tests" / "helpers" / "OsPyMixed" / "TCPAdaptersFromOs" / "Production.cls"
-    if not cls_host.exists():
-        raise FileNotFoundError(f"IRIS class file not found: {cls_host}")
-
-    #nothing
-    status = iris._SYSTEM.OBJ.Load(str(cls_host), "ck")
-    print("production loading status = ", status)
-    status = iris.Ens.Director.StartProduction("TCPAdaptersFromOs.Production")
+    status = director.start_production("TCPAdaptersFromOs.MyProduction")
     print("production starting status = ", status)
     end_loop = 1
     start_time = time.time()
-    prod = iris.ref()
-    running = iris.ref()
+
     while end_loop:
         if time.time()-start_time > 12:
             end_loop = 0
             print("unable to start production in 12 seconds")
             isrunning = 0
             break
-        status = iris.Ens.Director.GetProductionStatus(prod, running)
-        if running.value == 1:
+
+        status, prod, running = director.get_production_status()
+        if running == 1:
             isrunning = 1
             end_loop = 0
         else:
@@ -121,18 +103,17 @@ def startprod():
 
     yield
 
-    status = iris.Ens.Director.StopProduction()
+    status = director.stop_production()
 
     end_loop = 1
     start_time = time.time()
-    prod = iris.ref()
-    running = iris.ref()
+
     while end_loop:
         if time.time()-start_time > 12:
             end_loop = 0
             print("unable to stop production in 12 seconds")
-        status = iris.Ens.Director.GetProductionStatus(prod, running)
-        if running.value != 1:
+        status, prod, running = director.get_production_status()
+        if running != 1:
             end_loop = 0
         else:
             time.sleep(0.5)

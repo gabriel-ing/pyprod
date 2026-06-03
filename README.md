@@ -16,8 +16,10 @@ Using pyprod is essentially a **3 step process**. The following example shows a 
 
 ### Step 1: Create your production components
 ```python
-# save this as HelloWorld.py
+# save this as Readme.py
 from intersystems_pyprod import (BusinessProcess,Status)
+
+iris_package_name = "Readme"
 
 class HelloWorldBP(BusinessProcess):
     def OnRequest(self, request):
@@ -32,13 +34,45 @@ From a command line session where you configured the environment variables, run 
 ```bash
 $ intersystems_pyprod /full/path/to/HelloWorld.py
 
-    Loading HelloWorldBP to IRIS...
+    Compiling class Readme.HelloWorldBP...
     ...
     ...
     Load finished successfully.
 ```
 
-### Step 3: Create a production using the UI
+### Step 3: Create a production 
+You can create the production using one of two approaches: programmatically or using the UI.   
+Note: These two approaches must not be mixed - use only one for the entire lifecycle of a production.  
+
+#### A. Programmatically
+
+```python
+# add this to the end of the Readme.py file
+from intersystems_pyprod import Production, ServiceItem, ProcessItem
+
+class MyProduction(Production):
+    services = [
+        ServiceItem(
+            "MyFileService",
+            "EnsLib.File.PassthroughService",
+            host_settings={
+                "TargetConfigNames": "MyCustomBP",
+            },
+            adapter_settings={
+                "FilePath": "path/to/read/files/for/Readme/in",
+                "DeleteFromServer": 0,
+            },
+        )
+    ]
+    processes = [
+        ProcessItem("MyCustomBP", f"{iris_package_name}.HelloWorldBP")
+    ]
+```
+
+Follow Step 2 to load this production to IRIS
+
+
+#### B. Using the UI
 
 Create the production using the **Production Configuration** page, which you can access in the IRIS UI by navigating to **Interoperability > Configure > Productions**
 
@@ -49,15 +83,33 @@ This production reads in a file from a defined path and then forwards it to a ta
 We use a pre-existing Business Service called Enslib.File.PassthroughService. Configure the service by setting the file path from which it should read. Then select the Business Process you created as its target. 
 
 
-> **Note:** The Business Process name includes the script name (`HelloWorld`) appended to it. Read more about package names [here](https://github.com/intersystems/pyprod/blob/main/docs/apireference.md#-package-name-project-organization-)
+> **Note:** The Business Process class name in ProcessItem() includes the iris_package_name appended to it. Read more about package names [here](https://github.com/intersystems/pyprod/blob/main/docs/apireference.md#-package-name-project-organization-)
+
+
 
 ---
 ### Test your Production
+You can start the production and inspect messages in two ways:
+
+#### A. Using the UI
+
 Start the Production, then place a text file in the configured file path for the Business Service. After refreshing the Production page, you should see the messages that were delivered.
 
 ![HelloWorldResults](https://github.com/intersystems/pyprod/blob/main/docs/HelloWorldFiles/HelloWorldResults.png?raw=true)
 
 > **Note:** `EnsLib.File.PassthroughService` is an existing Business Service bundled with IRIS Productions. It loads a file from a specified location and forwards it to the configured target component.
+
+#### B. Programmatically
+You can control the production lifecycle and inspect messages using the director module. The following example starts the production, stops it, then retrieves messages sent and received at `MyFileService`:
+
+```python
+>>> from intersystems_pyprod import director
+>>> director.start_production("Readme.MyProduction")
+>>> director.stop_production()
+>>> msgs = director.get_host_messages("MyFileService",100)
+>>> msgs[1]
+{'id': '496', 'time_created': '2026-06-02 23:32:36.674', 'source': 'MyFileService', 'target': 'MyCustomBP', 'status': 9, 'session_id': 496, 'body_class': 'Ens.StreamContainer', 'body_id': '6'}
+```
 
 ---
 

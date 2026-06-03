@@ -50,6 +50,13 @@ Method OnInit() As %Status
     Quit status
 }}
 
+Method OnTearDown() As %Status
+{{
+    Set ..PythonClassObject = ""
+	Quit $$$OK
+}}
+
+
 """,
 
 ######## OnInitBP
@@ -400,7 +407,42 @@ Class {PackageName}.{ClassName} Extends ({Superclass})
 
 }}
 
+""",
+################################################################################################# Production class stubs
+# ______________________________________________________________________________________________ "production_class": """
+
+"production_class" : """ 
+
+/// DO NOT EDIT this class. Generated using {ClassName} python class
+Class {PackageName}.{ClassName} Extends Ens.Production
+{{
+
+XData ProductionDefinition
+{{
+<Production Name="{PackageName}.{ClassName}" TestingEnabled="{TestingEnabled}" LogGeneralTraceEvents="{LogGeneralTraceEvents}">
+  <Description> DO NOT EDIT this production from the UI. {Description}</Description>
+  <ActorPoolSize>{ActorPoolSize}</ActorPoolSize>{prod_level_settings}{prod_items}
+</Production>
+}}
+
+}}
 """
+,
+"prod_setting" : """
+  <Setting Name={setting_name}>{setting_value}</Setting>
+"""
+,
+"prod_item" : """
+<Item Name={ItemName} Category={ItemCategory} ClassName={ItemClassName} PoolSize={ItemPoolSize} Enabled={ItemEnabled} Foreground={ItemForeground} Comment={ItemComment} LogTraceEvents={ItemLogTraceEvents} Schedule={ItemSchedule}>
+{item_settings}
+</Item>
+"""
+,
+"item_setting" : """
+<Setting Target={SettingTarget} Name={SettingTargetPropertyName}>{SettingTargetPropertyValue}</Setting>
+"""
+
+
 
 # "ProductionMessage" will be generated using ClassDefinition and the above superclass. 
 # Properties can be generated for Indexes and newcols

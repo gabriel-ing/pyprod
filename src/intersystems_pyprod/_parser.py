@@ -2,6 +2,7 @@ import ast
 import os
 import sys
 import types
+import inspect
 import argparse
 from pathlib import Path
 from typing import Optional, Tuple
@@ -9,9 +10,16 @@ from types import ModuleType
 import importlib
 import importlib.util
 from operator import attrgetter
+import warnings
 
 from ._method_stubs import STUBS
+from ._production_definition import _create_production_class_strings, Production
+                         
 
+def _formatwarning(message, category, filename, lineno, line=None):        
+    return f"{message}"
+                                                                            
+warnings.formatwarning = _formatwarning
 
 TARGET_SUPERCLASSES = [
     "InboundAdapter",
@@ -26,7 +34,7 @@ MESSAGE_SUPERCLASSES = [ "JsonSerialize", "PickleSerialize"]
 # ——— local datatype map ———
 
 
-DATATYPE_MAP = {"str": "%VarString", "int": "%Integer", "bool": "%Boolean", "num":"%Numeric"}
+DATATYPE_MAP = {"str": "%VarString", "int": "%Integer", "bool": "%Boolean"}
 
 DATATYPE_MAP_Parameters = {"str": "STRING", "int": "INTEGER", "bool": "BOOLEAN"}
 
@@ -1004,9 +1012,25 @@ def main(argv: list[str] = None):
         real_path,
         python_library,
         loaded_module,
-        args.module
+        args.module,
     )
 
+    
+    subclasses = {  
+                    cls_name:cls_obj
+                    for cls_name, cls_obj in inspect.getmembers(loaded_module, inspect.isclass)
+                    if cls_obj.__module__ == loaded_module.__name__
+                    and issubclass(cls_obj, Production)
+                    and cls_obj is not Production
+                }
+  
+    all_production_classes, validation_warnings = _create_production_class_strings(iris_package_name, subclasses)
+    for class_name, class_string in all_production_classes.items():
+        load_to_iris(class_string,class_name)
+
+    print("\n")
+    for warn in validation_warnings:
+        warnings.warn( warn , stacklevel=1)
 
 
 if __name__ == "__main__":

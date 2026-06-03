@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        iris_image: [ "intersystems/iris-community:2026.1","intersystems/iris-community:2025.2", "intersystems/iris-community:2025.1", "intersystems/iris-community:2024.3" ]
+        iris_image: [ "intersystems/iris-community:2026.1","intersystems/iris-community:2025.2", "intersystems/iris-community:2025.1"]
         py: [ "3.9", "3.10", "3.11", "3.12" ]
 
     container:
@@ -63,7 +63,12 @@ jobs:
           pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.1.2-py3-none-any.whl"
           pip install "$GITHUB_WORKSPACE/dist/intersystems_pyprod-0.1.2-py3-none-any.whl" --target "/usr/irissys/mgr/python"
           intersystems_pyprod "$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.py"
+          runuser -u irisowner -- iris session IRIS -U ENSEMBLE "##class(%SYSTEM.OBJ).Load(\"$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.OSAdapterless.cls\",\"ck\")"
+          runuser -u irisowner -- iris session IRIS -U ENSEMBLE "##class(%SYSTEM.OBJ).Load(\"$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.OSCustomBP.cls\",\"ck\")"
+          runuser -u irisowner -- iris session IRIS -U ENSEMBLE "##class(%SYSTEM.OBJ).Load(\"$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/AllPyComponents.OSCustomBO.cls\",\"ck\")"
+          intersystems_pyprod "$GITHUB_WORKSPACE/tests/helpers/AllPyComponents/MyProduction.py"
           intersystems_pyprod "$GITHUB_WORKSPACE/tests/helpers/OsPyMixed/TCPAdaptersFromOs/TCPAdaptersFromOs.py"
+          intersystems_pyprod "$GITHUB_WORKSPACE/tests/helpers/OsPyMixed/TCPAdaptersFromOs/MyProduction.py"
           pytest -vv --maxfail=5 --tb=long tests | tee artifacts/tests.log
 
       - name: Make safe artifact name

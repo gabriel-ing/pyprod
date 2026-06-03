@@ -27,7 +27,11 @@ This document describes the core building blocks of a production, how they inter
   - [Business Process](#-business-process-)
   - [Business Operation](#-business-operation-)
   - [Outbound Adapter](#-outbound-adapter-)
-
+  - [Production Class](#-production-class-)
+  - [ServiceItem](#-serviceitem-)
+  - [ProcessItem](#-processitem-)
+  - [OperationItem](#-operationitem-)
+- [Director Module](#-director-module-)
 ---
 
 ## <span style="color:#2f81f7"> Production Overview </span>
@@ -620,4 +624,544 @@ class MyOutboundAdapter(OutboundAdapter):
         # Note: The output can be of any type and not necessarily a persistable message type
         return status, output
 
+```
+
+### <span style="color:#58a6ff"> Production Class </span>
+
+`Production` is a declarative base class for defining an IRIS production entirely in Python. Subclass it to declare the production's structure — its services, processes, and operations — and to configure production-level settings. When the file is loaded into an IRIS namespace, the production definition is generated automatically from this class.
+
+> **Note**  
+> Only attributes defined in the `Production` superclass are valid. Setting any other attribute will emit a warning at load time.
+
+#### Superclass: `Production`
+
+#### Class Attributes
+
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `services` | `list[ServiceItem]` | `None` | Business services to include in the production |
+| `processes` | `list[ProcessItem]` | `None` | Business processes to include in the production |
+| `operations` | `list[OperationItem]` | `None` | Business operations to include in the production |
+| `description` | `str` | `""` | Human-readable description of the production |
+| `actor_pool_size` | `int` | `2` | Number of jobs in the shared actor pool for business processes |
+| `testing_enabled` | `bool` | `False` | Enable testing infrastructure for the production |
+| `log_general_trace_events` | `bool` | `False` | Log trace events not associated with any particular config item |
+| `shutdown_timeout` | `int` | `120` | Seconds to wait for jobs to stop during shutdown |
+| `update_timeout` | `int` | `10` | Seconds to wait for jobs to stop during an update |
+| `alert_notification_manager` | `str` | `""` | Full config item name of the alert notification manager |
+| `alert_notification_operation` | `str` | `""` | Full config item name of the alert notification operation |
+| `alert_notification_recipients` | `str` | `""` | Comma-separated list of alert notification recipients |
+| `alert_action_window` | `int` | `60` | Time window in minutes for alert action |
+
+> **Note**  
+> `actor_pool_size`, `testing_enabled`, `log_general_trace_events`, and all item-level settings can be overridden by System Default Settings in the IRIS management portal. Overriding will occur even when a value is explicitly set in the production definition.
+
+#### Required Implementation
+
+```python
+from intersystems_pyprod import Production, ServiceItem, ProcessItem, OperationItem
+
+iris_package_name = "HelloWorld"
+
+class MyProduction(Production):
+    description = "A simple Hello World production"
+    actor_pool_size = 2
+
+    services = [
+        ServiceItem("HelloWorld.MyService", "HelloWorld.MyService",
+                    host_settings={"target": "HelloWorld.MyProcess"})
+    ]
+    processes = [
+        ProcessItem("HelloWorld.MyProcess", "HelloWorld.MyProcess",
+                    host_settings={"target": "HelloWorld.MyOperation"})
+    ]
+    operations = [
+        OperationItem("HelloWorld.MyOperation", "HelloWorld.MyOperation")
+    ]
+```
+
+---
+
+### <span style="color:#58a6ff"> ServiceItem </span>
+
+Declares a Business Service configuration item inside a `Production` definition. Each `ServiceItem` becomes one entry in the production's item list.
+
+#### Constructor Signature
+
+```python
+ServiceItem(
+    name,
+    class_name,
+    *,
+    host_settings=None,
+    adapter_settings=None,
+    category="",
+    pool_size=1,
+    enabled=True,
+    foreground=False,
+    comment="",
+    log_trace_events=False,
+    schedule=""
+)
+```
+
+#### Arguments
+
+**`name`** *(str, required)*  
+The config item name as it appears in the production, e.g. `"MyPackage.MyService"`.
+
+**`class_name`** *(str, required)*  
+The full IRIS class name of the business service, e.g. `"MyPackage.MyBusinessService"`.
+
+**`host_settings`** *(dict, optional)*  
+A dictionary of settings to apply to the business service host. Keys are property names (snake_case or PascalCase) and values are the desired setting values. A warning is emitted at load time for any key that does not match an existing property on the class.
+
+**`adapter_settings`** *(dict, optional)*  
+A dictionary of settings to apply to the inbound adapter associated with this service. Same key/value rules as `host_settings`. Only applicable when the service uses an inbound adapter.
+
+**`category`** *(str, optional)*  
+Comma-separated list of category names for display grouping on the Production Configuration page. Does not affect runtime behavior.
+
+**`pool_size`** *(int, default `1`)*  
+Number of jobs to start for this config item. Use `0` for adapterless Business Services (uses the shared actor pool); use `1` for adapter-based services. For TCP-based services with `JobPerConnection=1`, values greater than `1` limit the number of connection jobs.
+
+**`enabled`** *(bool, default `True`)*  
+Whether this config item starts enabled in the production.
+
+**`foreground`** *(bool, default `False`)*  
+Whether to run the job in the foreground rather than background. Non-container only.
+
+**`comment`** *(str, optional)*  
+Free-text comment displayed in the Production Configuration page.
+
+**`log_trace_events`** *(bool, default `False`)*  
+Whether to log trace events for this item.
+
+**`schedule`** *(str, optional)*  
+Specifies when this item should be stopped and restarted. Accepts either a comma-separated list of event specifications in the format `action:YYYY-MM-DDThh:mm:ss` (where `action` is `START` or `STOP`), or a named schedule prefixed with `@`. Example: `"START:*-*-*T08:00:00,STOP:*-*-*T17:00:00"` starts the item daily at 8 a.m. and stops it at 5 p.m. Named schedules are created on the **Interoperability > Configure > Schedule Specs** page and referenced as `"@MyScheduleName"`.
+
+#### Example
+
+```python
+ServiceItem(
+    "MyPackage.MyService",
+    "MyPackage.MyBusinessService",
+    host_settings={"TargetConfigName": "MyPackage.MyProcess",
+                   "GenerateSuperSessionID": 1},
+    adapter_settings={"Port": 12345, "AllowedIPAddresses": "127.0.0.1"},
+    pool_size=1,
+    enabled=True,
+    comment="Receives TCP input and forwards to MyProcess"
+)
+```
+
+---
+
+### <span style="color:#58a6ff"> ProcessItem </span>
+
+Declares a Business Process configuration item inside a `Production` definition. `ProcessItem` has the same parameters as `ServiceItem` except it does not accept `adapter_settings`, since business processes do not use adapters.
+
+#### Constructor Signature
+
+```python
+ProcessItem(
+    name,
+    class_name,
+    *,
+    host_settings=None,
+    category="",
+    pool_size=1,
+    enabled=True,
+    foreground=False,
+    comment="",
+    log_trace_events=False,
+    schedule=""
+)
+```
+
+#### Arguments
+
+All arguments have the same meaning as in [`ServiceItem`](#-serviceitem-). The `adapter_settings` argument is not available for `ProcessItem`.
+
+> **Note on `pool_size`**  
+> Use `pool_size=0` to run business processes from the shared actor pool (the default approach). Use `pool_size=1` only for FIFO message-router processes that require a dedicated job.
+
+#### Example
+
+```python
+ProcessItem(
+    "MyPackage.MyProcess",
+    "MyPackage.MyBusinessProcess",
+    host_settings={"TargetConfigName": "MyPackage.MyOperation"},
+    pool_size=0
+)
+```
+
+---
+
+### <span style="color:#58a6ff"> OperationItem </span>
+
+Declares a Business Operation configuration item inside a `Production` definition. `OperationItem` accepts the same parameters as `ServiceItem`, including `adapter_settings` for configuring an outbound adapter.
+
+#### Constructor Signature
+
+```python
+OperationItem(
+    name,
+    class_name,
+    *,
+    host_settings=None,
+    adapter_settings=None,
+    category="",
+    pool_size=1,
+    enabled=True,
+    foreground=False,
+    comment="",
+    log_trace_events=False,
+    schedule=""
+)
+```
+
+#### Arguments
+
+All arguments have the same meaning as in [`ServiceItem`](#-serviceitem-).
+
+#### Example
+
+```python
+OperationItem(
+    "MyPackage.MyOperation",
+    "MyPackage.MyBusinessOperation",
+    host_settings={"FailureTimeout": 30},
+    adapter_settings={"IPAddress": "127.0.0.1", "Port": 12346,
+                      "StayConnected": 0, "GetReply": 0}
+)
+```
+
+---
+
+## <span style="color:#2f81f7"> Director Module </span>
+
+The `director` module wraps `Ens.Director`, the IRIS interoperability runtime controller. It provides functions to start, stop, restart, inspect, and interact with productions from Python code running inside an IRIS namespace.
+
+Most functions return an IRIS status code as the first value. A value of `1` indicates success; any other value is an encoded error string. The exception is `get_host_messages`, which returns a list directly.
+
+Import the functions you need directly from the module:
+
+```python
+from intersystems_pyprod.director import (
+    start_production,
+    stop_production,
+    restart_production,
+    get_production_status,
+    update_production,
+    clean_production,
+    enable_config_item,
+    list_all_productions,
+    get_host_messages,
+    create_business_service,
+)
+```
+
+---
+
+### <span style="color:#58a6ff"> `start_production` </span>
+
+Start a production.
+
+```python
+start_production(prod_name: str = None) -> str
+```
+
+#### Parameters
+
+**`prod_name`** *(str, optional)*  
+The full IRIS class name of the production to start, e.g. `"MyPackage.MyProduction"`. If omitted, defaults to the last production used in this namespace.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+#### Example
+
+```python
+status = start_production("MyPackage.MyProduction")
+```
+
+---
+
+### <span style="color:#58a6ff"> `stop_production` </span>
+
+Stop the currently running production.
+
+```python
+stop_production(timeout: int = 10, force: bool = False) -> str
+```
+
+#### Parameters
+
+**`timeout`** *(int, default `10`)*  
+Seconds to wait for running jobs to shut down gracefully.
+
+**`force`** *(bool, default `False`)*  
+If `True`, forcefully kills jobs that do not stop within the timeout.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+---
+
+### <span style="color:#58a6ff"> `restart_production` </span>
+
+Stop and restart the currently running production.
+
+```python
+restart_production(timeout: int = 10, force: bool = False) -> str
+```
+
+#### Parameters
+
+Same as [`stop_production`](#-stop_production-).
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+---
+
+### <span style="color:#58a6ff"> `update_production` </span>
+
+Apply configuration changes to a running production without a full stop/start cycle.
+
+```python
+update_production(timeout: int = 10, force: bool = False, called_by_schedule_handler: bool = False) -> str
+```
+
+#### Parameters
+
+**`timeout`** *(int, default `10`)*  
+Seconds to wait for affected jobs to stop before the update is applied.
+
+**`force`** *(bool, default `False`)*  
+If `True`, forcefully kills jobs that do not stop within the timeout.
+
+**`called_by_schedule_handler`** *(bool, default `False`)*  
+Set to `True` only when this function is invoked by the internal schedule handler.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+---
+
+### <span style="color:#58a6ff"> `get_production_status` </span>
+
+Get the current status of the production (when it is running, suspended, or troubled).
+
+```python
+get_production_status(lock_timeout: int = 10, skip_lock_if_running: bool = False) -> tuple[str, str, str]
+```
+
+#### Parameters
+
+**`lock_timeout`** *(int, default `10`)*  
+Seconds to wait before the lock operation times out. `0` means one attempt then time out.
+
+**`skip_lock_if_running`** *(bool, default `False`)*  
+If `True`, skips acquiring the lock when the production is already running.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+**`production_name`** *(str)* — Name of the production when the state is running, suspended, or troubled. Empty when stopped.
+
+**`running_state`** *(str)* — One of:
+
+| Value | Meaning |
+|-------|---------|
+| `1` | Running |
+| `2` | Stopped (no `production_name` is returned) |
+| `3` | Suspended |
+| `4` | Troubled |
+
+#### Example
+
+```python
+status, prod_name, state = get_production_status()
+if state == "1":
+    print(f"{prod_name} is running")
+```
+
+---
+
+### <span style="color:#58a6ff"> `clean_production` </span>
+
+> **WARNING**  
+> Never use this on a live, deployed production. This removes all messages from queues and all current production state. Use only during development, and only when the production is stopped.
+
+```python
+clean_production(kill_app_data_too: bool = False) -> str
+```
+
+#### Parameters
+
+**`kill_app_data_too`** *(bool, default `False`)*  
+If `True`, also removes application data in addition to production state.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+---
+
+### <span style="color:#58a6ff"> `enable_config_item` </span>
+
+Enable or disable a config item in a production. The production may be running or stopped.
+
+```python
+enable_config_item(config_item_name: str, enable: bool = True, do_update: bool = True) -> str
+```
+
+#### Parameters
+
+**`config_item_name`** *(str, required)*  
+The name of the config item as it appears in the production, e.g. `"MyPackage.MyService"`.
+
+**`enable`** *(bool, default `True`)*  
+`True` to enable, `False` to disable. If multiple items share the same config name and any is already enabled, `enable=True` is a no-op. `enable=False` disables the running matching item, or the first enabled match if none are running.
+
+**`do_update`** *(bool, default `True`)*  
+If `True`, calls `update_production` automatically after the change so it takes effect on a running production immediately.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+#### Example
+
+```python
+status = enable_config_item("MyPackage.MyService", enable=False)
+```
+
+---
+
+### <span style="color:#58a6ff"> `list_all_productions` </span>
+
+Return a summary of all productions present in the current namespace.
+
+```python
+list_all_productions() -> tuple[str, list[str], dict[str, dict[str, str]]]
+```
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+**`list_of_productions`** *(list[str])* — Names of all productions in the namespace.
+
+**`complete_production_details`** *(dict[str, dict[str, str]])* — Production names mapped to a dict with the following keys:
+
+| Key | Description |
+|-----|-------------|
+| `"status"` | Current status string (e.g. `"Running"`, `"Stopped"`) |
+| `"last_start_time"` | Timestamp of the last start, or `None` |
+| `"last_stop_time"` | Timestamp of the last stop, or `None` |
+
+#### Example
+
+```python
+status, names, details = list_all_productions()
+for name in names:
+    print(name, details[name]["status"])
+```
+
+---
+
+### <span style="color:#58a6ff"> `get_host_messages` </span>
+
+Return messages sent from or received by a business host, most recent first.
+
+```python
+get_host_messages(host_name: str, max_results: int = 100) -> list[dict[str, Any]]
+```
+
+#### Parameters
+
+**`host_name`** *(str, required)*  
+The config item name of the business host as it appears in the production.
+
+**`max_results`** *(int, default `100`)*  
+Maximum number of messages to return.
+
+#### Returns
+
+A list of message dicts, each with the following keys:
+
+| Key | Description |
+|-----|-------------|
+| `"id"` | Message header ID |
+| `"time_created"` | Timestamp the message was created |
+| `"source"` | Source config item name |
+| `"target"` | Target config item name |
+| `"status"` | Message status |
+| `"session_id"` | Session ID |
+| `"body_class"` | Full class name of the message body |
+| `"body_id"` | ID of the message body object |
+
+#### Example
+
+```python
+messages = get_host_messages("MyPackage.MyOperation", max_results=20)
+for msg in messages:
+    print(msg["time_created"], msg["source"], "->", msg["target"])
+```
+
+---
+
+### <span style="color:#58a6ff"> `create_business_service` </span>
+
+Create an adapterless business service instance. Used to inject messages directly into a running production from Python code, without going through an inbound adapter.
+
+```python
+create_business_service(service_class_name: str) -> tuple[str, _AdapterlessService]
+```
+
+#### Parameters
+
+**`service_class_name`** *(str, required)*  
+The full IRIS class name of the adapterless business service, e.g. `"MyPackage.MyBusinessService"`.
+
+#### Returns
+
+**`status`** — IRIS status code. `1` indicates success.
+
+**`service`** — An `_AdapterlessService` wrapper object. Do not instantiate `_AdapterlessService` directly; always obtain it through this function.
+
+#### `_AdapterlessService`
+
+The returned object exposes the IRIS properties of the underlying service directly as Python attributes. Reads and writes are forwarded to the IRIS side automatically. Snake_case attribute names are converted to PascalCase before lookup.
+
+It also exposes one method:
+
+##### `process_input(input: Any) -> tuple[str, Any]`
+
+Send an input to the business service and return the result.
+
+> **Parameters**  
+> **`input`** — Any Python object that the business service's `OnProcessInput` callback knows how to handle.  
+>
+> **Returns**  
+> **`status`** — IRIS status code. `1` indicates success.  
+> **`response`** — The response object returned by the service.
+
+#### Example
+
+```python
+from intersystems_pyprod.director import create_business_service
+
+status, service = create_business_service("MyPackage.MyAdapterlessService")
+service.TargetConfigName = "MyPackage.MyProcess"   # set an IRIS property
+status, response = service.process_input(my_request)
 ```
